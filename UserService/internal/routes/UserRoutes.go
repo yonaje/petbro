@@ -18,4 +18,5 @@ func UserRoutes(mux *http.ServeMux, handler *handlers.UserHandler) {
 	// internal exists
 	mux.HandleFunc("GET /internal/user/{id}", handler.Exists) // check if user exists by id
 	mux.HandleFunc("POST /internal/user", handler.Create)     // create new user (internal)
+	mux.HandleFunc("DELETE /internal/user/{id}", handler.Delete)
 }
