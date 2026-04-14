@@ -7,7 +7,12 @@ import (
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 	"github.com/yonaje/friendservice/internal/models"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 )
+
+var tracer = otel.Tracer("friendservice/repository")
 
 var (
 	ErrSelfRequest           = errors.New("user cannot interact with self")
@@ -34,7 +39,16 @@ func NewFriendRepository(driver neo4j.DriverWithContext) FriendRepository {
 }
 
 func (r *friendRepository) SendRequest(ctx context.Context, fromUserID int, toUserID int) error {
+	ctx, span := tracer.Start(ctx, "FriendRepository.SendRequest")
+	defer span.End()
+	span.SetAttributes(
+		attribute.Int("friend.from_user_id", fromUserID),
+		attribute.Int("friend.to_user_id", toUserID),
+	)
+
 	if fromUserID == toUserID {
+		span.RecordError(ErrSelfRequest)
+		span.SetStatus(codes.Error, "user cannot interact with self")
 		return ErrSelfRequest
 	}
 
@@ -91,12 +105,27 @@ func (r *friendRepository) SendRequest(ctx context.Context, fromUserID int, toUs
 
 		return nil, nil
 	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to send friend request")
+		return err
+	}
 
-	return err
+	span.SetStatus(codes.Ok, "friend request sent successfully")
+	return nil
 }
 
 func (r *friendRepository) AcceptRequest(ctx context.Context, fromUserID int, toUserID int) error {
+	ctx, span := tracer.Start(ctx, "FriendRepository.AcceptRequest")
+	defer span.End()
+	span.SetAttributes(
+		attribute.Int("friend.from_user_id", fromUserID),
+		attribute.Int("friend.to_user_id", toUserID),
+	)
+
 	if fromUserID == toUserID {
+		span.RecordError(ErrSelfRequest)
+		span.SetStatus(codes.Error, "user cannot interact with self")
 		return ErrSelfRequest
 	}
 
@@ -130,11 +159,21 @@ func (r *friendRepository) AcceptRequest(ctx context.Context, fromUserID int, to
 
 		return nil, nil
 	})
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to accept friend request")
+		return err
+	}
 
-	return err
+	span.SetStatus(codes.Ok, "friend request accepted successfully")
+	return nil
 }
 
 func (r *friendRepository) ListFriends(ctx context.Context, userID int) ([]models.Friend, error) {
+	ctx, span := tracer.Start(ctx, "FriendRepository.ListFriends")
+	defer span.End()
+	span.SetAttributes(attribute.Int("user.id", userID))
+
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -157,13 +196,22 @@ func (r *friendRepository) ListFriends(ctx context.Context, userID int) ([]model
 		return friends, cursor.Err()
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get friends")
 		return nil, err
 	}
 
-	return result.([]models.Friend), nil
+	friends := result.([]models.Friend)
+	span.SetAttributes(attribute.Int("friend.count", len(friends)))
+	span.SetStatus(codes.Ok, "friends retrieved successfully")
+	return friends, nil
 }
 
 func (r *friendRepository) ListIncomingRequests(ctx context.Context, userID int) ([]models.FriendRequest, error) {
+	ctx, span := tracer.Start(ctx, "FriendRepository.ListIncomingRequests")
+	defer span.End()
+	span.SetAttributes(attribute.Int("user.id", userID))
+
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -191,13 +239,25 @@ func (r *friendRepository) ListIncomingRequests(ctx context.Context, userID int)
 		return requests, cursor.Err()
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get incoming requests")
 		return nil, err
 	}
 
-	return result.([]models.FriendRequest), nil
+	requests := result.([]models.FriendRequest)
+	span.SetAttributes(attribute.Int("friend.request_count", len(requests)))
+	span.SetStatus(codes.Ok, "incoming requests retrieved successfully")
+	return requests, nil
 }
 
 func (r *friendRepository) Recommendations(ctx context.Context, userID int, limit int) ([]models.FriendRecommendation, error) {
+	ctx, span := tracer.Start(ctx, "FriendRepository.Recommendations")
+	defer span.End()
+	span.SetAttributes(
+		attribute.Int("user.id", userID),
+		attribute.Int("recommendations.limit", limit),
+	)
+
 	session := r.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -232,10 +292,15 @@ func (r *friendRepository) Recommendations(ctx context.Context, userID int, limi
 		return recommendations, cursor.Err()
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to get recommendations")
 		return nil, err
 	}
 
-	return result.([]models.FriendRecommendation), nil
+	recommendations := result.([]models.FriendRecommendation)
+	span.SetAttributes(attribute.Int("recommendations.count", len(recommendations)))
+	span.SetStatus(codes.Ok, "recommendations retrieved successfully")
+	return recommendations, nil
 }
 
 func getRelationshipCount(ctx context.Context, tx neo4j.ManagedTransaction, query string, params map[string]any) (int64, error) {

@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func New(cfg Config) (*zap.Logger, error) {
@@ -14,15 +15,17 @@ func New(cfg Config) (*zap.Logger, error) {
 		return nil, err
 	}
 
-	zapCfg := buildZapConfig(cfg, level)
-	l, err := zapCfg.Build(
+	encoder := buildEncoder(cfg)
+	core, err := buildCore(cfg, level, encoder)
+	if err != nil {
+		return nil, err
+	}
+
+	l := zap.New(
+		core,
 		zap.AddCaller(),
 		zap.AddStacktrace(zapcore.ErrorLevel),
 	)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to build logger: %w", err)
-	}
 
 	l = l.With(
 		zap.String("service", cfg.Service),
@@ -48,33 +51,79 @@ func parseLevel(lvl string) (zapcore.Level, error) {
 	}
 }
 
-func buildZapConfig(cfg Config, level zapcore.Level) zap.Config {
-	var zapCfg zap.Config
-
-	switch cfg.Format {
-	case "console":
-		zapCfg = zap.NewDevelopmentConfig()
-		zapCfg.Encoding = "console"
-	default:
-		zapCfg = zap.NewProductionConfig()
-		zapCfg.Encoding = "json"
+func buildEncoder(cfg Config) zapcore.Encoder {
+	encoderCfg := zap.NewProductionEncoderConfig()
+	if cfg.Format == "console" {
+		encoderCfg = zap.NewDevelopmentEncoderConfig()
 	}
 
-	zapCfg.Level = zap.NewAtomicLevelAt(level)
-	zapCfg.OutputPaths = []string{"stdout"}
-	zapCfg.ErrorOutputPaths = []string{"stderr"}
+	encoderCfg.TimeKey = "timestamp"
+	encoderCfg.LevelKey = "level"
+	encoderCfg.MessageKey = "message"
+	encoderCfg.CallerKey = "caller"
+	encoderCfg.StacktraceKey = "stacktrace"
+	encoderCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	encoderCfg.EncodeDuration = zapcore.MillisDurationEncoder
 
-	zapCfg.Sampling = nil
+	if cfg.Format == "console" {
+		return zapcore.NewConsoleEncoder(encoderCfg)
+	}
 
-	zapCfg.EncoderConfig.TimeKey = "timestamp"
-	zapCfg.EncoderConfig.LevelKey = "level"
-	zapCfg.EncoderConfig.MessageKey = "message"
-	zapCfg.EncoderConfig.CallerKey = "caller"
-	zapCfg.EncoderConfig.StacktraceKey = "stacktrace"
-	zapCfg.EncoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
-	zapCfg.EncoderConfig.EncodeDuration = zapcore.MillisDurationEncoder
+	return zapcore.NewJSONEncoder(encoderCfg)
+}
 
-	return zapCfg
+func buildCore(cfg Config, level zapcore.Level, encoder zapcore.Encoder) (zapcore.Core, error) {
+	if cfg.Output == "file" {
+		infoWriter := zapcore.AddSync(newRollingFile(cfg, false))
+		errorWriter := zapcore.AddSync(newRollingFile(cfg, true))
+
+		infoLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl >= level && lvl < zapcore.ErrorLevel
+		})
+		errorLevel := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
+			return lvl >= maxLevel(level, zapcore.ErrorLevel)
+		})
+
+		return zapcore.NewTee(
+			zapcore.NewCore(encoder, infoWriter, infoLevel),
+			zapcore.NewCore(encoder, errorWriter, errorLevel),
+		), nil
+	}
+
+	return zapcore.NewCore(
+		encoder,
+		zapcore.Lock(os.Stdout),
+		level,
+	), nil
+}
+
+func newRollingFile(cfg Config, errorsOnly bool) *lumberjack.Logger {
+	filename := cfg.FilePath
+	if errorsOnly && cfg.ErrorPath != "" {
+		filename = cfg.ErrorPath
+	}
+
+	return &lumberjack.Logger{
+		Filename:   filename,
+		MaxSize:    defaultInt(cfg.MaxSizeMB, 20),
+		MaxBackups: defaultInt(cfg.MaxBackups, 10),
+		MaxAge:     defaultInt(cfg.MaxAgeDays, 30),
+		Compress:   cfg.CompressFile,
+	}
+}
+
+func maxLevel(a, b zapcore.Level) zapcore.Level {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func defaultInt(value, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	return fallback
 }
 
 func Sync(l *zap.Logger) {

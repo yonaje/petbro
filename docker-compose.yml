@@ -1,0 +1,133 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: petbro-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+
+  neo4j:
+    image: neo4j:5
+    container_name: petbro-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/password
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+
+  userservice:
+    build:
+      context: ./UserService
+    container_name: petbro-userservice
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      SERVICE_NAME: userservice
+      SERVICE_PORT: "8081"
+      APP_ENV: prod
+      APP_VERSION: "1.0.0"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      LOG_OUTPUT: file
+      LOG_FILE_PATH: /app/logs/app.log
+      LOG_ERROR_FILE_PATH: /app/logs/error.log
+      LOG_MAX_SIZE_MB: "20"
+      LOG_MAX_BACKUPS: "10"
+      LOG_MAX_AGE_DAYS: "30"
+      LOG_COMPRESS: "true"
+
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: user_service
+
+      JWT_SECRET: secretkey
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./logs/userservice:/app/logs
+
+  authservice:
+    build:
+      context: ./AuthService
+    container_name: petbro-authservice
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - userservice
+    environment:
+      SERVICE_NAME: authservice
+      SERVICE_PORT: "8080"
+      APP_ENV: prod
+      APP_VERSION: "1.0.0"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      LOG_OUTPUT: file
+      LOG_FILE_PATH: /app/logs/app.log
+      LOG_ERROR_FILE_PATH: /app/logs/error.log
+      LOG_MAX_SIZE_MB: "20"
+      LOG_MAX_BACKUPS: "10"
+      LOG_MAX_AGE_DAYS: "30"
+      LOG_COMPRESS: "true"
+
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: auth_service
+
+      USER_SERVICE_BASE_URL: http://userservice:8081
+      JWT_SECRET: secretkey
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./logs/authservice:/app/logs
+
+  friendservice:
+    build:
+      context: ./FriendService
+    container_name: petbro-friendservice
+    restart: unless-stopped
+    depends_on:
+      - neo4j
+      - userservice
+    environment:
+      SERVICE_NAME: friendservice
+      SERVICE_PORT: "8082"
+      APP_ENV: prod
+      APP_VERSION: "1.0.0"
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      LOG_OUTPUT: file
+      LOG_FILE_PATH: /app/logs/app.log
+      LOG_ERROR_FILE_PATH: /app/logs/error.log
+      LOG_MAX_SIZE_MB: "20"
+      LOG_MAX_BACKUPS: "10"
+      LOG_MAX_AGE_DAYS: "30"
+      LOG_COMPRESS: "true"
+
+      USER_SERVICE_BASE_URL: http://userservice:8081
+      JWT_SECRET: secretkey
+
+      NEO4J_URI: neo4j://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./logs/friendservice:/app/logs
+
+volumes:
+  postgres_data:
+  neo4j_data:

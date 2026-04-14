@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/yonaje/userservice/internal/database"
 	"github.com/yonaje/userservice/internal/handlers"
@@ -26,19 +27,26 @@ func main() {
 
 	// initialize logger
 	log := logger.Must(logger.New(logger.Config{
-		Service: getEnv("SERVICE"),
-		Env:     getEnv("LOG_ENV"),
-		Version: getEnv("APP_VERSION"),
-		Level:   getEnv("LOG_LEVEL"),
-		Format:  getEnv("LOG_FORMAT"),
+		Service:      getEnv("SERVICE_NAME"),
+		Env:          getEnv("APP_ENV"),
+		Version:      getEnv("APP_VERSION"),
+		Level:        getEnv("LOG_LEVEL"),
+		Format:       getEnv("LOG_FORMAT"),
+		Output:       getEnv("LOG_OUTPUT"),
+		FilePath:     getEnv("LOG_FILE_PATH"),
+		ErrorPath:    getEnv("LOG_ERROR_FILE_PATH"),
+		MaxSizeMB:    getEnvInt("LOG_MAX_SIZE_MB", 20),
+		MaxBackups:   getEnvInt("LOG_MAX_BACKUPS", 10),
+		MaxAgeDays:   getEnvInt("LOG_MAX_AGE_DAYS", 30),
+		CompressFile: getEnvBool("LOG_COMPRESS", true),
 	}))
 
 	defer logger.Sync(log)
 
 	// initialize tracing
 	shutdown, err := tracing.Init(ctx, tracing.Config{
-		Service: getEnv("SERVICE"),
-		Env:     getEnv("LOG_ENV"),
+		Service: getEnv("SERVICE_NAME"),
+		Env:     getEnv("APP_ENV"),
 		Version: getEnv("APP_VERSION"),
 	})
 
@@ -58,10 +66,10 @@ func main() {
 	// connect to database
 	db, err := database.Connect(
 		log,
-		getEnv("DB_HOST"),
-		getEnv("DB_USER"),
-		getEnv("DB_PASSWORD"),
-		getEnv("DB_NAME"),
+		getEnv("POSTGRES_HOST"),
+		getEnv("POSTGRES_USER"),
+		getEnv("POSTGRES_PASSWORD"),
+		getEnv("POSTGRES_DB"),
 	)
 
 	if err != nil {
@@ -74,11 +82,20 @@ func main() {
 	// initialize handler
 	userHandler := handlers.NewUserHandler(userRepository, log)
 
+	authMiddleware, err := middleware.NewAuthMiddleware(getEnv("JWT_SECRET"), log)
+	if err != nil {
+		log.Fatal("Failed to initialize auth middleware",
+			zap.String("operation", "main"),
+			zap.String("step", "init_auth_middleware"),
+			zap.Error(err),
+		)
+	}
+
 	// initialize router
 	mux := http.NewServeMux()
 
 	// register routes
-	routes.RegisterRoutes(mux, userHandler)
+	routes.RegisterRoutes(mux, userHandler, authMiddleware)
 
 	// wrap with middleware
 	var handler http.Handler = mux
@@ -86,7 +103,7 @@ func main() {
 	handler = middleware.Logging(log, handler)        // add logging middleware
 
 	// start server
-	addr := getEnv("APP_PORT")
+	addr := getEnv("SERVICE_PORT")
 
 	if err := http.ListenAndServe(":"+addr, handler); err != nil {
 		log.Fatal("Failed to start server: ",
@@ -112,4 +129,44 @@ func getEnv(key string) string {
 	}
 
 	return val
+}
+
+func getEnvInt(key string, fallback int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.Atoi(val)
+	if err != nil {
+		log.Fatal("Invalid integer environment variable",
+			zap.String("operation", "main"),
+			zap.String("step", "getEnvInt"),
+			zap.String("key", key),
+			zap.String("value", val),
+			zap.Error(err),
+		)
+	}
+
+	return parsed
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(val)
+	if err != nil {
+		log.Fatal("Invalid boolean environment variable",
+			zap.String("operation", "main"),
+			zap.String("step", "getEnvBool"),
+			zap.String("key", key),
+			zap.String("value", val),
+			zap.Error(err),
+		)
+	}
+
+	return parsed
 }
