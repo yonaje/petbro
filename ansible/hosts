@@ -1,0 +1,2 @@
+[hosts]
+client ansible_host=185.128.107.95 ansible_port=1337 ansible_user=yona ansible_ssh_private_key_file=/Users/yonaje/.ssh/testkey
