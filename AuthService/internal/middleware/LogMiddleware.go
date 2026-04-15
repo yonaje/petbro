@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/yonaje/authservice/internal/logger"
+	"github.com/yonaje/authservice/internal/metrics"
 	"go.uber.org/zap"
 )
 
@@ -38,6 +39,7 @@ func Logging(log *zap.Logger, next http.Handler) http.Handler {
 		rw := newResponseWriter(w)
 
 		next.ServeHTTP(rw, r)
+		metrics.ObserveHTTPRequest(r, rw.status, time.Since(start), rw.bytes)
 
 		reqLog := logger.WithTrace(r.Context(), log)
 		fields := []zap.Field{

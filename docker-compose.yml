@@ -128,6 +128,31 @@ services:
     volumes:
       - ./logs/friendservice:/app/logs
 
+  prometheus:
+    image: prom/prometheus:v3.7.1
+    container_name: petbro-prometheus
+    restart: unless-stopped
+    depends_on:
+      - userservice
+      - authservice
+      - friendservice
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    container_name: petbro-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
 volumes:
   postgres_data:
   neo4j_data:
+  grafana_data:

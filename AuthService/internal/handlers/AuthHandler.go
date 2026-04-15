@@ -13,6 +13,7 @@ import (
 	"github.com/yonaje/authservice/internal/clients"
 	"github.com/yonaje/authservice/internal/jwt"
 	"github.com/yonaje/authservice/internal/logger"
+	"github.com/yonaje/authservice/internal/metrics"
 	"github.com/yonaje/authservice/internal/models"
 	"github.com/yonaje/authservice/internal/repository"
 	"go.opentelemetry.io/otel"
@@ -58,6 +59,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		metrics.IncAuthEvent("register", "bad_request")
 		log.Warn("Invalid register request body",
 			zap.String("operation", "AuthHandler.Register"),
 			zap.String("step", "decode_request"),
@@ -70,6 +72,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Email == "" || req.Password == "" || req.Username == "" {
+		metrics.IncAuthEvent("register", "bad_request")
 		span.SetAttributes(
 			attribute.Bool("auth.email_present", req.Email != ""),
 			attribute.Bool("auth.password_present", req.Password != ""),
@@ -92,6 +95,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	_, err := h.AuthRepository.GetByEmail(ctx, req.Email)
 	if err == nil {
+		metrics.IncAuthEvent("register", "conflict")
 		log.Warn("Register rejected because email already exists",
 			zap.String("operation", "AuthHandler.Register"),
 			zap.String("step", "check_email"),
@@ -102,6 +106,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		metrics.IncAuthEvent("register", "error")
 		log.Error("Failed to check existing auth account",
 			zap.String("operation", "AuthHandler.Register"),
 			zap.String("step", "check_email"),
@@ -115,6 +120,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	userID, err := h.UserClient.CreateUser(ctx, req.Username, req.Description, req.Avatar)
 	if err != nil {
+		metrics.IncAuthEvent("register", "error")
 		log.Error("Failed to create user profile",
 			zap.String("operation", "AuthHandler.Register"),
 			zap.String("step", "create_user"),
@@ -149,6 +155,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := jwt.GenerateHash(req.Password)
 	if err != nil {
+		metrics.IncAuthEvent("register", "error")
 		log.Error("Failed to hash password",
 			zap.String("operation", "AuthHandler.Register"),
 			zap.String("step", "generate_hash"),
@@ -168,6 +175,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.AuthRepository.Create(ctx, auth); err != nil {
+		metrics.IncAuthEvent("register", "error")
 		log.Error("Failed to create auth account",
 			zap.String("operation", "AuthHandler.Register"),
 			zap.String("step", "create_auth_account"),
@@ -188,6 +196,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "register_success"),
 		zap.Int("user_id", userID),
 	)
+	metrics.IncAuthEvent("register", "success")
 	registrationCompleted = true
 	span.SetStatus(codes.Ok, "auth account registered successfully")
 }
@@ -208,6 +217,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		metrics.IncAuthEvent("login", "bad_request")
 		log.Warn("Invalid login request body",
 			zap.String("operation", "AuthHandler.Login"),
 			zap.String("step", "decode_request"),
@@ -226,6 +236,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	auth, err := h.AuthRepository.GetByEmail(ctx, req.Email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			metrics.IncAuthEvent("login", "invalid_credentials")
 			log.Warn("Login failed because account was not found",
 				zap.String("operation", "AuthHandler.Login"),
 				zap.String("step", "get_by_email"),
@@ -234,6 +245,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid email or password", http.StatusUnauthorized)
 			return
 		}
+		metrics.IncAuthEvent("login", "error")
 		log.Error("Failed to load auth account",
 			zap.String("operation", "AuthHandler.Login"),
 			zap.String("step", "get_by_email"),
@@ -246,6 +258,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !auth.Status {
+		metrics.IncAuthEvent("login", "blocked")
 		log.Warn("Login rejected because account is blocked",
 			zap.String("operation", "AuthHandler.Login"),
 			zap.String("step", "check_status"),
@@ -257,6 +270,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if jwt.CompareHash(auth.PasswordHash, req.Password) != nil {
+		metrics.IncAuthEvent("login", "invalid_credentials")
 		log.Warn("Login failed because password is invalid",
 			zap.String("operation", "AuthHandler.Login"),
 			zap.String("step", "compare_password"),
@@ -272,6 +286,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	accessToken, err := jwt.GenerateJWT(userID)
 	if err != nil {
+		metrics.IncAuthEvent("login", "error")
 		log.Error("Failed to generate access token",
 			zap.String("operation", "AuthHandler.Login"),
 			zap.String("step", "generate_access_token"),
@@ -286,6 +301,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	refreshToken, err := jwt.GenerateRefreshToken()
 	if err != nil {
+		metrics.IncAuthEvent("login", "error")
 		log.Error("Failed to generate refresh token",
 			zap.String("operation", "AuthHandler.Login"),
 			zap.String("step", "generate_refresh_token"),
@@ -313,6 +329,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err := h.AuthRepository.SaveSession(ctx, session); err != nil {
+		metrics.IncAuthEvent("login", "error")
 		log.Error("Failed to save session",
 			zap.String("operation", "AuthHandler.Login"),
 			zap.String("step", "save_session"),
@@ -347,6 +364,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "login_success"),
 		zap.String("user_id", userID),
 	)
+	metrics.IncAuthEvent("login", "success")
 	span.SetStatus(codes.Ok, "user logged in successfully")
 }
 
@@ -362,6 +380,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
+		metrics.IncAuthEvent("logout", "bad_request")
 		log.Warn("Missing refresh token on logout",
 			zap.String("operation", "AuthHandler.Logout"),
 			zap.String("step", "read_cookie"),
@@ -375,6 +394,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	span.SetAttributes(attribute.Bool("session.refresh_token_present", cookie.Value != ""))
 
 	if err := h.AuthRepository.DeleteSessionByRefreshToken(ctx, cookie.Value); err != nil {
+		metrics.IncAuthEvent("logout", "error")
 		log.Error("Failed to delete session",
 			zap.String("operation", "AuthHandler.Logout"),
 			zap.String("step", "delete_session"),
@@ -402,6 +422,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		zap.String("operation", "AuthHandler.Logout"),
 		zap.String("step", "logout_success"),
 	)
+	metrics.IncAuthEvent("logout", "success")
 	span.SetStatus(codes.Ok, "user logged out successfully")
 }
 
@@ -417,6 +438,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
+		metrics.IncAuthEvent("refresh", "bad_request")
 		log.Warn("Missing refresh token on refresh",
 			zap.String("operation", "AuthHandler.Refresh"),
 			zap.String("step", "read_cookie"),
@@ -432,6 +454,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	session, err := h.AuthRepository.GetSessionByRefreshToken(ctx, cookie.Value)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			metrics.IncAuthEvent("refresh", "invalid_token")
 			log.Warn("Refresh rejected because session was not found",
 				zap.String("operation", "AuthHandler.Refresh"),
 				zap.String("step", "get_session"),
@@ -440,6 +463,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 			return
 		}
+		metrics.IncAuthEvent("refresh", "error")
 		log.Error("Failed to get session by refresh token",
 			zap.String("operation", "AuthHandler.Refresh"),
 			zap.String("step", "get_session"),
@@ -452,6 +476,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if time.Now().After(session.ExpiresAt) {
+		metrics.IncAuthEvent("refresh", "expired")
 		_ = h.AuthRepository.DeleteSessionByRefreshToken(ctx, cookie.Value)
 		log.Warn("Refresh token expired",
 			zap.String("operation", "AuthHandler.Refresh"),
@@ -469,6 +494,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	accessToken, err := jwt.GenerateJWT(session.UserID)
 	if err != nil {
+		metrics.IncAuthEvent("refresh", "error")
 		log.Error("Failed to generate access token during refresh",
 			zap.String("operation", "AuthHandler.Refresh"),
 			zap.String("step", "generate_access_token"),
@@ -483,6 +509,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	newRefreshToken, err := jwt.GenerateRefreshToken()
 	if err != nil {
+		metrics.IncAuthEvent("refresh", "error")
 		log.Error("Failed to generate rotated refresh token",
 			zap.String("operation", "AuthHandler.Refresh"),
 			zap.String("step", "generate_refresh_token"),
@@ -499,6 +526,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	session.ExpiresAt = time.Now().Add(7 * 24 * time.Hour)
 
 	if err := h.AuthRepository.UpdateSession(ctx, session); err != nil {
+		metrics.IncAuthEvent("refresh", "error")
 		log.Error("Failed to rotate refresh token",
 			zap.String("operation", "AuthHandler.Refresh"),
 			zap.String("step", "update_session"),
@@ -533,6 +561,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "refresh_success"),
 		zap.String("user_id", session.UserID),
 	)
+	metrics.IncAuthEvent("refresh", "success")
 	span.SetStatus(codes.Ok, "access token refreshed successfully")
 }
 
@@ -549,6 +578,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
 	span.SetAttributes(attribute.Bool("http.authorization_present", authHeader != ""))
 	if authHeader == "" {
+		metrics.IncAuthEvent("me", "unauthorized")
 		log.Warn("Missing authorization header",
 			zap.String("operation", "AuthHandler.Me"),
 			zap.String("step", "read_authorization_header"),
@@ -560,6 +590,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	parts := strings.Split(authHeader, " ")
 	if len(parts) != 2 || parts[0] != "Bearer" {
+		metrics.IncAuthEvent("me", "unauthorized")
 		log.Warn("Invalid authorization header format",
 			zap.String("operation", "AuthHandler.Me"),
 			zap.String("step", "parse_authorization_header"),
@@ -573,6 +604,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := jwt.ValidateJWT(tokenString)
 	if err != nil {
+		metrics.IncAuthEvent("me", "unauthorized")
 		log.Warn("Failed to validate access token",
 			zap.String("operation", "AuthHandler.Me"),
 			zap.String("step", "validate_access_token"),
@@ -586,6 +618,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	userID, ok := claims["user_id"].(string)
 	if !ok {
+		metrics.IncAuthEvent("me", "unauthorized")
 		log.Warn("Access token does not contain string user_id",
 			zap.String("operation", "AuthHandler.Me"),
 			zap.String("step", "extract_user_id"),
@@ -599,6 +632,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	auth, err := h.AuthRepository.GetByUserID(ctx, userID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			metrics.IncAuthEvent("me", "not_found")
 			log.Warn("Auth account not found for current user",
 				zap.String("operation", "AuthHandler.Me"),
 				zap.String("step", "get_by_user_id"),
@@ -608,6 +642,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "User not found", http.StatusNotFound)
 			return
 		}
+		metrics.IncAuthEvent("me", "error")
 		log.Error("Failed to load current auth account",
 			zap.String("operation", "AuthHandler.Me"),
 			zap.String("step", "get_by_user_id"),
@@ -635,6 +670,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "me_success"),
 		zap.String("user_id", userID),
 	)
+	metrics.IncAuthEvent("me", "success")
 	span.SetStatus(codes.Ok, "current user loaded successfully")
 }
 
@@ -652,6 +688,7 @@ func (h *AuthHandler) handleWriteError(
 	}
 
 	if errors.Is(err, context.Canceled) {
+		metrics.IncAuthEvent(step, "canceled")
 		log.Warn("Request canceled during response write", append(fields,
 			zap.String("operation", operation),
 			zap.String("step", step),
@@ -669,6 +706,7 @@ func (h *AuthHandler) handleWriteError(
 		zap.Error(err),
 	)...)
 
+	metrics.IncAuthEvent(step, "write_error")
 	span.RecordError(err)
 	span.SetStatus(codes.Error, message)
 	return true

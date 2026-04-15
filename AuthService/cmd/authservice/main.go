@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/yonaje/authservice/internal/clients"
 	"github.com/yonaje/authservice/internal/database"
 	"github.com/yonaje/authservice/internal/handlers"
@@ -107,6 +108,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	routes.RegisterRoutes(mux, authHandler)
+	mux.Handle("GET /metrics", promhttp.Handler())
 
 	var handler http.Handler = mux
 	handler = otelhttp.NewHandler(handler, "http-server")

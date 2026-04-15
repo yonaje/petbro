@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/yonaje/userservice/internal/database"
 	"github.com/yonaje/userservice/internal/handlers"
 	"github.com/yonaje/userservice/internal/logger"
@@ -96,6 +97,7 @@ func main() {
 
 	// register routes
 	routes.RegisterRoutes(mux, userHandler, authMiddleware)
+	mux.Handle("GET /metrics", promhttp.Handler())
 
 	// wrap with middleware
 	var handler http.Handler = mux

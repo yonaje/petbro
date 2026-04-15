@@ -9,6 +9,7 @@ import (
 
 	"github.com/yonaje/friendservice/internal/clients"
 	"github.com/yonaje/friendservice/internal/logger"
+	"github.com/yonaje/friendservice/internal/metrics"
 	"github.com/yonaje/friendservice/internal/middleware"
 	"github.com/yonaje/friendservice/internal/repository"
 	"go.opentelemetry.io/otel"
@@ -50,6 +51,7 @@ func (h *FriendHandler) SendRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		metrics.IncFriendEvent("send_request", "bad_request")
 		if h.handleBadRequest(w, span, log, "FriendHandler.SendRequest", "decode_request", "Invalid request body", err) {
 			return
 		}
@@ -103,6 +105,7 @@ func (h *FriendHandler) SendRequest(w http.ResponseWriter, r *http.Request) {
 		zap.Int("from_user_id", request.FromUserID),
 		zap.Int("to_user_id", request.ToUserID),
 	)
+	metrics.IncFriendEvent("send_request", "success")
 	span.SetStatus(codes.Ok, "friend request sent successfully")
 }
 
@@ -122,6 +125,7 @@ func (h *FriendHandler) AcceptRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		metrics.IncFriendEvent("accept_request", "bad_request")
 		if h.handleBadRequest(w, span, log, "FriendHandler.AcceptRequest", "decode_request", "Invalid request body", err) {
 			return
 		}
@@ -175,6 +179,7 @@ func (h *FriendHandler) AcceptRequest(w http.ResponseWriter, r *http.Request) {
 		zap.Int("from_user_id", request.FromUserID),
 		zap.Int("to_user_id", request.ToUserID),
 	)
+	metrics.IncFriendEvent("accept_request", "success")
 	span.SetStatus(codes.Ok, "friend request accepted successfully")
 }
 
@@ -228,6 +233,7 @@ func (h *FriendHandler) Friends(w http.ResponseWriter, r *http.Request) {
 		zap.Int("user_id", userID),
 		zap.Int("friend_count", len(friends)),
 	)
+	metrics.IncFriendEvent("list_friends", "success")
 	span.SetStatus(codes.Ok, "friends retrieved successfully")
 }
 
@@ -281,6 +287,7 @@ func (h *FriendHandler) IncomingRequests(w http.ResponseWriter, r *http.Request)
 		zap.Int("user_id", userID),
 		zap.Int("request_count", len(requests)),
 	)
+	metrics.IncFriendEvent("list_incoming_requests", "success")
 	span.SetStatus(codes.Ok, "incoming requests retrieved successfully")
 }
 
@@ -346,6 +353,7 @@ func (h *FriendHandler) Recommendations(w http.ResponseWriter, r *http.Request) 
 		zap.Int("limit", limit),
 		zap.Int("recommendation_count", len(recommendations)),
 	)
+	metrics.IncFriendEvent("recommendations", "success")
 	span.SetStatus(codes.Ok, "friend recommendations retrieved successfully")
 }
 
@@ -374,6 +382,7 @@ func (h *FriendHandler) ensureUsersExist(
 
 		exists, err := h.userClient.UserExists(ctx, userID)
 		if err != nil {
+			metrics.IncFriendEvent("validate_user", "error")
 			log.Error("Failed to validate user via user service",
 				zap.String("operation", operation),
 				zap.String("step", "validate_user"),
@@ -387,6 +396,7 @@ func (h *FriendHandler) ensureUsersExist(
 		}
 
 		if !exists {
+			metrics.IncFriendEvent("validate_user", "not_found")
 			log.Warn("User not found during validation",
 				zap.String("operation", operation),
 				zap.String("step", "validate_user"),
@@ -418,10 +428,12 @@ func (h *FriendHandler) handleBadRequest(
 		zap.String("step", step),
 	}, fields...)
 	if err != nil {
+		metrics.IncFriendEvent(step, "bad_request")
 		logFields = append(logFields, zap.Error(err))
 		log.Warn(message, logFields...)
 		span.RecordError(err)
 	} else {
+		metrics.IncFriendEvent(step, "bad_request")
 		log.Warn(message, logFields...)
 	}
 
@@ -443,6 +455,7 @@ func (h *FriendHandler) requireAuthenticatedUser(
 			zap.String("operation", operation),
 			zap.String("step", "read_authenticated_user"),
 		)
+		metrics.IncFriendEvent("authenticate_user", "unauthorized")
 		span.SetStatus(codes.Error, "authenticated user missing")
 		http.Error(w, "Invalid access token", http.StatusUnauthorized)
 		return 0, false
@@ -456,6 +469,7 @@ func (h *FriendHandler) requireAuthenticatedUser(
 			zap.String("auth_user_id", userIDRaw),
 			zap.Error(err),
 		)
+		metrics.IncFriendEvent("authenticate_user", "unauthorized")
 		if err != nil {
 			span.RecordError(err)
 		}
@@ -509,6 +523,15 @@ func (h *FriendHandler) handleRepositoryError(
 	}, fields...)
 	logFields = append(logFields, zap.Error(err))
 
+	if status >= 500 {
+		metrics.IncFriendEvent(step, "error")
+	} else if status == http.StatusNotFound {
+		metrics.IncFriendEvent(step, "not_found")
+	} else if status == http.StatusConflict {
+		metrics.IncFriendEvent(step, "conflict")
+	} else {
+		metrics.IncFriendEvent(step, "bad_request")
+	}
 	level(message, logFields...)
 	span.RecordError(err)
 	span.SetStatus(codes.Error, message)
@@ -534,6 +557,7 @@ func (h *FriendHandler) handleWriteError(
 		zap.String("step", step),
 		zap.Error(err),
 	}, fields...)
+	metrics.IncFriendEvent(step, "write_error")
 	log.Error(message, logFields...)
 	span.RecordError(err)
 	span.SetStatus(codes.Error, message)

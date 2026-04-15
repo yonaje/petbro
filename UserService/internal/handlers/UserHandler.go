@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/yonaje/userservice/internal/logger"
+	"github.com/yonaje/userservice/internal/metrics"
 	"github.com/yonaje/userservice/internal/models"
 	"github.com/yonaje/userservice/internal/repository"
 	"go.opentelemetry.io/otel"
@@ -93,6 +94,7 @@ func (h *UserHandler) Users(w http.ResponseWriter, r *http.Request) {
 		zap.Int("user_count", len(users)),
 	)
 
+	metrics.IncUserOperation("list_users", "success")
 	span.SetStatus(codes.Ok, "users retrieved successfully")
 }
 
@@ -137,6 +139,7 @@ func (h *UserHandler) User(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "user_retrieved"),
 	)
 
+	metrics.IncUserOperation("get_user", "success")
 	span.SetStatus(codes.Ok, "user retrieved successfully")
 }
 
@@ -173,6 +176,7 @@ func (h *UserHandler) Exists(w http.ResponseWriter, r *http.Request) {
 			zap.String("step", "user_not_found"),
 		)
 
+		metrics.IncUserOperation("check_user_exists", "not_found")
 		span.SetStatus(codes.Ok, "user does not exist")
 		span.SetAttributes(attribute.Int("user.id", id))
 
@@ -206,6 +210,7 @@ func (h *UserHandler) Exists(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "existence_checked"),
 	)
 
+	metrics.IncUserOperation("check_user_exists", "success")
 	span.SetStatus(codes.Ok, "user existence checked successfully")
 }
 
@@ -250,6 +255,7 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "user_created"),
 	)
 
+	metrics.IncUserOperation("create_user", "success")
 	span.SetStatus(codes.Ok, "user created successfully")
 	span.SetAttributes(attribute.Int("user.id", int(user.ID)))
 }
@@ -313,6 +319,7 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "user_updated"),
 	)
 
+	metrics.IncUserOperation("update_user", "success")
 	span.SetStatus(codes.Ok, "user updated successfully")
 	span.SetAttributes(attribute.Int("user.id", id))
 
@@ -367,6 +374,7 @@ func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		zap.String("step", "user_deleted"),
 	)
 
+	metrics.IncUserOperation("delete_user", "success")
 	span.SetStatus(codes.Ok, "user deleted successfully")
 	span.SetAttributes(attribute.Int("user.id", id))
 }
@@ -393,12 +401,14 @@ func (h *UserHandler) handleRepositoryError(
 
 	switch {
 	case errors.Is(err, context.Canceled):
+		metrics.IncUserOperation(step, "canceled")
 		log.Warn("Request canceled", baseFields...)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "request canceled")
 		return true
 
 	case errors.Is(err, context.DeadlineExceeded):
+		metrics.IncUserOperation(step, "timeout")
 		log.Error("Request timeout", baseFields...)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "request timeout")
@@ -406,6 +416,7 @@ func (h *UserHandler) handleRepositoryError(
 		return true
 
 	case errors.Is(err, gorm.ErrRecordNotFound):
+		metrics.IncUserOperation(step, "not_found")
 		log.Warn("Resource not found", baseFields...)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "record not found")
@@ -413,6 +424,7 @@ func (h *UserHandler) handleRepositoryError(
 		return true
 
 	case errors.Is(err, repository.ErrUsernameAlreadyTaken):
+		metrics.IncUserOperation(step, "conflict")
 		log.Warn("Username already taken", baseFields...)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "username already taken")
@@ -420,6 +432,7 @@ func (h *UserHandler) handleRepositoryError(
 		return true
 
 	default:
+		metrics.IncUserOperation(step, "error")
 		log.Error(message, baseFields...)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, message)
@@ -448,6 +461,7 @@ func (h *UserHandler) handleBadRequest(
 		zap.Error(err),
 	)...)
 
+	metrics.IncUserOperation(step, "bad_request")
 	span.RecordError(err)
 	span.SetStatus(codes.Error, message)
 
@@ -469,6 +483,7 @@ func (h *UserHandler) handleWriteError(
 	}
 
 	if errors.Is(err, context.Canceled) {
+		metrics.IncUserOperation(step, "canceled")
 		log.Warn("Request canceled during response write", append(fields,
 			zap.String("operation", operation),
 			zap.String("step", step),
@@ -486,6 +501,7 @@ func (h *UserHandler) handleWriteError(
 		zap.Error(err),
 	)...)
 
+	metrics.IncUserOperation(step, "write_error")
 	span.RecordError(err)
 	span.SetStatus(codes.Error, message)
 	return true
