@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   postgres:
     image: postgres:18
@@ -11,8 +9,13 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   neo4j:
     image: neo4j:5
@@ -32,7 +35,8 @@ services:
     container_name: petbro-userservice
     restart: unless-stopped
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       SERVICE_NAME: userservice
       SERVICE_PORT: "8081"
@@ -65,8 +69,10 @@ services:
     container_name: petbro-authservice
     restart: unless-stopped
     depends_on:
-      - postgres
-      - userservice
+      postgres:
+        condition: service_healthy
+      userservice:
+        condition: service_started
     environment:
       SERVICE_NAME: authservice
       SERVICE_PORT: "8080"
