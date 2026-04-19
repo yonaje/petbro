@@ -102,11 +102,15 @@ func main() {
 
 	mux := http.NewServeMux()
 	routes.RegisterRoutes(mux, friendHandler, authMiddleware)
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.Handle("GET /metrics", promhttp.Handler())
 
 	var handler http.Handler = mux
 	handler = otelhttp.NewHandler(handler, "http-server")
 	handler = middleware.Logging(log, handler)
+	handler = middleware.CORS(handler)
 
 	addr := ":" + getEnv("SERVICE_PORT")
 	if err := http.ListenAndServe(addr, handler); err != nil {

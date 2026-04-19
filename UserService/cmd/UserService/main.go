@@ -97,12 +97,16 @@ func main() {
 
 	// register routes
 	routes.RegisterRoutes(mux, userHandler, authMiddleware)
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	mux.Handle("GET /metrics", promhttp.Handler())
 
 	// wrap with middleware
 	var handler http.Handler = mux
 	handler = otelhttp.NewHandler(mux, "http-server") // add tracing middleware
 	handler = middleware.Logging(log, handler)        // add logging middleware
+	handler = middleware.CORS(handler)
 
 	// start server
 	addr := getEnv("SERVICE_PORT")

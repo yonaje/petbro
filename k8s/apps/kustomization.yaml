@@ -1,0 +1,48 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - core/namespace.yaml
+
+  - core/secrets/grafana.yaml
+  - core/secrets/jwt.yaml
+  - core/secrets/neo4j.yaml
+  - core/secrets/postgres.yaml
+
+  - network/default-deny-all.yaml
+  - network/allow-dns-egress.yaml
+
+  - databases/postgres/configmap.yaml
+  - databases/postgres/service.yaml
+  - databases/postgres/statefulset.yaml
+  - databases/postgres/network-policy.yaml
+
+  - databases/neo4j/service.yaml
+  - databases/neo4j/statefulset.yaml
+  - databases/neo4j/network-policy.yaml
+
+  - apps/auth/service.yaml
+  - apps/auth/deployment.yaml
+  - apps/auth/network-policy.yaml
+
+  - apps/user/service.yaml
+  - apps/user/deployment.yaml
+  - apps/user/network-policy.yaml
+
+  - apps/friend/service.yaml
+  - apps/friend/deployment.yaml
+  - apps/friend/network-policy.yaml
+
+  - apps/frontend/service.yaml
+  - apps/frontend/deployment.yaml
+  - apps/frontend/network-policy.yaml
+
+  - monitoring/prometheus/configmap.yaml
+  - monitoring/prometheus/service.yaml
+  - monitoring/prometheus/deployment.yaml
+  - monitoring/prometheus/network-policy.yaml
+
+  - monitoring/grafana/configmap.yaml
+  - monitoring/grafana/service.yaml
+  - monitoring/grafana/deployment.yaml
+  - monitoring/grafana/network-policy.yaml

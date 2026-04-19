@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>petbro board</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <section id="authScreen" class="auth-screen">
+        <div class="auth-wrap">
+          <header class="auth-header">
+            <p class="eyebrow">petbro / awkward social board / old-web mode</p>
+            <h1>petbro</h1>
+            <p class="tagline">enter board / see mutuals / lurk user cards / send requests</p>
+          </header>
+
+          <div class="auth-box">
+            <div class="auth-tabs">
+              <button id="showLoginBtn" class="tab active" type="button">login</button>
+              <button id="showRegisterBtn" class="tab" type="button">register</button>
+            </div>
+
+            <form id="loginForm" class="auth-form">
+              <label>
+                <span>email</span>
+                <input name="email" placeholder="anon@example.com" required />
+              </label>
+              <label>
+                <span>password</span>
+                <input name="password" placeholder="password" type="password" required />
+              </label>
+              <button type="submit" class="primary">enter board</button>
+            </form>
+
+            <form id="registerForm" class="auth-form" hidden>
+              <label>
+                <span>email</span>
+                <input name="email" placeholder="anon@example.com" required />
+              </label>
+              <label>
+                <span>password</span>
+                <input name="password" placeholder="password" type="password" required />
+              </label>
+              <label>
+                <span>username</span>
+                <input name="name" placeholder="board name" required />
+              </label>
+              <label>
+                <span>description</span>
+                <input name="description" placeholder="sleep deprived poster" />
+              </label>
+              <label>
+                <span>avatar url</span>
+                <input name="avatar" placeholder="https://..." />
+              </label>
+              <button type="submit" class="primary">make account</button>
+            </form>
+
+            <div id="authNotice" class="notice">use your authservice account here</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="appScreen" class="app-screen" hidden>
+        <header class="site-header">
+          <div>
+            <p class="eyebrow">petbro / main board / definitely not polished</p>
+            <h2>main page</h2>
+          </div>
+          <div class="site-actions">
+            <div id="viewerMini" class="viewer-mini">not loaded</div>
+            <button id="refreshAppBtn" type="button">refresh</button>
+            <button id="logoutBtn" type="button">logout</button>
+          </div>
+        </header>
+
+        <nav class="main-nav">
+          <button class="nav-btn active" data-view="friendsView" type="button">friends</button>
+          <button class="nav-btn" data-view="discoverView" type="button">discover</button>
+          <button class="nav-btn" data-view="profileView" type="button">profile</button>
+        </nav>
+
+        <main class="view-stack">
+          <section id="friendsView" class="view active">
+            <div class="hero-grid">
+              <article class="panel hero-card">
+                <h3>your card</h3>
+                <div id="meCard" class="muted">profile loading...</div>
+              </article>
+              <article class="panel hero-card">
+                <h3>quick notes</h3>
+                <ul class="plain-list">
+                  <li>incoming requests can be accepted in one click</li>
+                  <li>recommendations come from mutuals</li>
+                  <li>directory shows rough user cards, not a polished feed</li>
+                </ul>
+              </article>
+            </div>
+
+            <div class="triple-grid">
+              <article class="panel">
+                <div class="panel-head">
+                  <h3>incoming requests</h3>
+                  <button id="incomingBtn" type="button">reload</button>
+                </div>
+                <div id="incomingList" class="listing muted">nothing loaded yet</div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-head">
+                  <h3>friends</h3>
+                  <button id="friendsBtn" type="button">reload</button>
+                </div>
+                <div id="friendsList" class="listing muted">nothing loaded yet</div>
+              </article>
+
+              <article class="panel">
+                <div class="panel-head">
+                  <h3>recommended people</h3>
+                  <button id="recommendationsBtn" type="button">reload</button>
+                </div>
+                <div id="recommendationsList" class="listing muted">nothing loaded yet</div>
+              </article>
+            </div>
+          </section>
+
+          <section id="discoverView" class="view">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>user directory</h3>
+                <form id="usersQueryForm" class="toolbar">
+                  <input name="page" value="1" placeholder="page" />
+                  <input name="limit" value="20" placeholder="limit" />
+                  <select name="sort">
+                    <option value="id">id</option>
+                    <option value="username">username</option>
+                  </select>
+                  <select name="order">
+                    <option value="asc">asc</option>
+                    <option value="desc">desc</option>
+                  </select>
+                  <button type="submit">load</button>
+                </form>
+              </div>
+
+              <form id="userByIdForm" class="toolbar single-line">
+                <input name="id" placeholder="user id" required />
+                <button type="submit">get one</button>
+              </form>
+
+              <div id="usersList" class="listing muted">directory not loaded yet</div>
+            </article>
+          </section>
+
+          <section id="profileView" class="view">
+            <article class="panel">
+              <h3>edit your profile</h3>
+              <form id="updateUserForm" class="profile-form">
+                <input name="id" type="hidden" />
+                <label>
+                  <span>username</span>
+                  <input name="username" placeholder="username" />
+                </label>
+                <label>
+                  <span>description</span>
+                  <textarea name="description" rows="4" placeholder="small board status"></textarea>
+                </label>
+                <label>
+                  <span>avatar url</span>
+                  <input name="avatar" placeholder="https://..." />
+                </label>
+                <div class="toolbar single-line">
+                  <button type="submit" class="primary">save profile</button>
+                  <button id="deleteMeBtn" type="button" class="danger">delete profile</button>
+                </div>
+              </form>
+            </article>
+          </section>
+        </main>
+
+        <footer class="site-footer">
+          <div id="statusLine">idle</div>
+        </footer>
+      </section>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
