@@ -44,6 +44,7 @@ spec:
     - metadata:
         name: neo4j-data
       spec:
+        storageClassName: local-storage
         accessModes:
           - ReadWriteOnce
         resources:

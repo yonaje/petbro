@@ -1,0 +1,27 @@
+- name: Prepare all Kubernetes nodes
+  hosts: k8s_cluster
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - k8s_prerequisites
+    - containerd
+    - kubeadm
+    - local_images
+
+- name: Initialize Kubernetes master and install CNI
+  hosts: masters
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - k8s_master
+    - cni
+
+- name: Join worker nodes
+  hosts: workers
+  become: true
+  vars_files:
+    - ../group_vars/all.yml
+  roles:
+    - k8s_workers

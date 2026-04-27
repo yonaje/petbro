@@ -3,13 +3,6 @@ kind: NetworkPolicy
 metadata:
   name: userservice-policy
   namespace: petbro
-spec:
-  podSelector:
-    matchLabels:
-      app: userservice
-  policyTypes:
-    - Ingress
-    - Egress
   ingress:
     - from:
         - podSelector:

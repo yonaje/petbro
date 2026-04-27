@@ -1,0 +1,34 @@
+
+vm_user: "master"
+
+k8s_version: "1.29"
+
+
+pod_network_cidr: "10.244.0.0/16"
+service_network_cidr: "10.96.0.0/12"
+cluster_dns_ip: "10.96.0.10"
+
+cni: "flannel"
+
+flannel_manifest_url: "https://cdn.jsdelivr.net/gh/flannel-io/flannel@master/Documentation/kube-flannel.yml"
+calico_manifest_url: "https://raw.githubusercontent.com/projectcalico/calico/v3.27.3/manifests/calico.yaml"
+
+join_command_path: "{{ playbook_dir }}/../inventory/join-command.txt"
+
+offline_image_archives:
+  - image: "petbro-authservice:latest"
+    archive: "petbro-authservice_latest.tar"
+  - image: "petbro-userservice:latest"
+    archive: "petbro-userservice_latest.tar"
+  - image: "petbro-friendservice:latest"
+    archive: "petbro-friendservice_latest.tar"
+  - image: "petbro-frontend:latest"
+    archive: "petbro-frontend_latest.tar"
+  - image: "postgres:18"
+    archive: "postgres_18.tar"
+  - image: "neo4j:5"
+    archive: "neo4j_5.tar"
+  - image: "prom/prometheus:v2.53.0"
+    archive: "prom_prometheus_v2.53.0.tar"
+  - image: "grafana/grafana:11.1.0"
+    archive: "grafana_grafana_11.1.0.tar"

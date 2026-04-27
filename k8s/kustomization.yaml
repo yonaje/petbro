@@ -12,6 +12,8 @@ resources:
   - network/default-deny-all.yaml
   - network/allow-dns-egress.yaml
 
+  - storage/local-storage.yaml
+
   - databases/postgres/configmap.yaml
   - databases/postgres/service.yaml
   - databases/postgres/statefulset.yaml

@@ -1,0 +1,90 @@
+- name: Wait for Kubernetes API server
+  become_user: "{{ vm_user }}"
+  command: kubectl get --raw=/readyz
+  register: kube_apiserver_ready
+  changed_when: false
+  retries: 30
+  delay: 10
+  until: kube_apiserver_ready.rc == 0
+
+- name: Create local manifest cache directory
+  delegate_to: localhost
+  become: false
+  file:
+    path: "{{ playbook_dir }}/../.cache"
+    state: directory
+    mode: "0755"
+
+- name: Check cached Flannel manifest
+  delegate_to: localhost
+  become: false
+  stat:
+    path: "{{ playbook_dir }}/../.cache/kube-flannel.yml"
+  register: cached_flannel_manifest
+  when: cni == "flannel"
+
+- name: Download Flannel manifest on the Ansible control host
+  delegate_to: localhost
+  become: false
+  get_url:
+    url: "{{ flannel_manifest_url }}"
+    dest: "{{ playbook_dir }}/../.cache/kube-flannel.yml"
+    mode: "0644"
+    timeout: 90
+  when:
+    - cni == "flannel"
+    - not cached_flannel_manifest.stat.exists
+
+- name: Copy Flannel manifest to master
+  copy:
+    src: "{{ playbook_dir }}/../.cache/kube-flannel.yml"
+    dest: /tmp/kube-flannel.yml
+    mode: "0644"
+  when: cni == "flannel"
+
+- name: Install Flannel CNI
+  become_user: "{{ vm_user }}"
+  shell: kubectl --request-timeout=300s create --validate=false -f /tmp/kube-flannel.yml || kubectl --request-timeout=300s apply --validate=false -f /tmp/kube-flannel.yml
+  register: flannel_apply
+  changed_when: false
+  retries: 10
+  delay: 20
+  until: flannel_apply.rc == 0
+  when: cni == "flannel"
+
+- name: Check cached Calico manifest
+  delegate_to: localhost
+  become: false
+  stat:
+    path: "{{ playbook_dir }}/../.cache/calico.yml"
+  register: cached_calico_manifest
+  when: cni == "calico"
+
+- name: Download Calico manifest on the Ansible control host
+  delegate_to: localhost
+  become: false
+  get_url:
+    url: "{{ calico_manifest_url }}"
+    dest: "{{ playbook_dir }}/../.cache/calico.yml"
+    mode: "0644"
+    timeout: 90
+  when:
+    - cni == "calico"
+    - not cached_calico_manifest.stat.exists
+
+- name: Copy Calico manifest to master
+  copy:
+    src: "{{ playbook_dir }}/../.cache/calico.yml"
+    dest: /tmp/calico.yml
+    mode: "0644"
+  when: cni == "calico"
+
+- name: Install Calico CNI
+  become_user: "{{ vm_user }}"
+  shell: kubectl --request-timeout=300s create --validate=false -f /tmp/calico.yml || kubectl --request-timeout=300s apply --validate=false -f /tmp/calico.yml
+  register: calico_apply
+  changed_when: false
+  retries: 10
+  delay: 20
+  until: calico_apply.rc == 0
+  when: cni == "calico"

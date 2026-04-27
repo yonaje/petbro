@@ -1,2 +1,46 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local environments and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+ssh/
+*.pem
+*.key
+*.crt
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+
+# Go
+**/.gocache/
+*.test
+coverage.out
+
+# Logs
 logs/
 *.log
+
+# Build artifacts and archives
+dist/
+build/
+tmp/
+*.tar
+*.tar.gz
+images/
+
+# Ansible
+ansible/.cache/
+ansible/inventory/hosts.ini
+ansible/inventory/join-command.txt
+*.retry

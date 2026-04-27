@@ -1,0 +1,64 @@
+- name: Create apt keyrings directory
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+- name: Download Kubernetes apt key
+  get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/Release.key"
+    dest: /tmp/kubernetes-release.key
+    mode: "0644"
+
+- name: Convert Kubernetes apt key
+  command: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-release.key
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add Kubernetes apt repository
+  copy:
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    mode: "0644"
+    content: |
+      deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /
+
+- name: Install kubeadm, kubelet, and kubectl
+  apt:
+    name:
+      - kubeadm
+      - kubelet
+      - kubectl
+    state: present
+    update_cache: true
+
+- name: Hold Kubernetes packages
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubeadm
+    - kubelet
+    - kubectl
+
+- name: Configure kubelet to use the inventory IP
+  copy:
+    dest: /etc/default/kubelet
+    mode: "0644"
+    content: |
+      KUBELET_EXTRA_ARGS=--node-ip={{ ansible_host }}
+  notify: Restart kubelet
+
+- name: Configure crictl to use containerd
+  copy:
+    dest: /etc/crictl.yaml
+    mode: "0644"
+    content: |
+      runtime-endpoint: unix:///run/containerd/containerd.sock
+      image-endpoint: unix:///run/containerd/containerd.sock
+      timeout: 10
+      debug: false
+
+- name: Enable kubelet
+  systemd:
+    name: kubelet
+    enabled: true

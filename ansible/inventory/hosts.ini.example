@@ -1,0 +1,10 @@
+[masters]
+master ansible_host=MASTER_IP ansible_user=master ansible_ssh_private_key_file=~/Desktop/petbro/ssh/petbro
+
+[workers]
+worker-1 ansible_host=WORKER_1_IP ansible_user=worker ansible_ssh_private_key_file=~/Desktop/petbro/ssh/petbro
+worker-2 ansible_host=WORKER_2_IP ansible_user=worker ansible_ssh_private_key_file=~/Desktop/petbro/ssh/petbro
+
+[k8s_cluster:children]
+masters
+workers

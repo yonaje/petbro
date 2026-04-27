@@ -1,0 +1,50 @@
+- name: Disable swap for the current boot
+  command: swapoff -a
+  changed_when: false
+
+- name: Disable swap in fstab
+  replace:
+    path: /etc/fstab
+    regexp: '^([^#].*\sswap\s.*)$'
+    replace: '# \1'
+
+- name: Configure Kubernetes kernel modules
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    mode: "0644"
+    content: |
+      overlay
+      br_netfilter
+
+- name: Load overlay module
+  modprobe:
+    name: overlay
+    state: present
+
+- name: Load br_netfilter module
+  modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Configure Kubernetes sysctl settings
+  copy:
+    dest: /etc/sysctl.d/k8s.conf
+    mode: "0644"
+    content: |
+      net.bridge.bridge-nf-call-iptables = 1
+      net.bridge.bridge-nf-call-ip6tables = 1
+      net.ipv4.ip_forward = 1
+
+- name: Apply sysctl settings
+  command: sysctl --system
+  changed_when: false
+
+- name: Install prerequisite packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gpg
+    state: present
+    update_cache: true

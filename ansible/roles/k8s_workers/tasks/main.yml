@@ -1,0 +1,31 @@
+- name: Check if worker already joined the cluster
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: kubelet_conf
+
+- name: Read join command from the Ansible control host
+  delegate_to: localhost
+  become: false
+  slurp:
+    src: "{{ join_command_path }}"
+  register: join_command_file
+  when: not kubelet_conf.stat.exists
+
+- name: Join worker to Kubernetes cluster
+  command: "{{ join_command_file.content | b64decode | trim }}"
+  when: not kubelet_conf.stat.exists
+
+- name: Configure kubelet cluster DNS
+  replace:
+    path: /var/lib/kubelet/config.yaml
+    regexp: '(?m)^clusterDNS:\n- .*$'
+    replace: |-
+      clusterDNS:
+      - {{ cluster_dns_ip }}
+  register: kubelet_cluster_dns
+
+- name: Restart kubelet after cluster DNS change
+  systemd:
+    name: kubelet
+    state: restarted
+  when: kubelet_cluster_dns.changed

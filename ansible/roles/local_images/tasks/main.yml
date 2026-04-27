@@ -1,0 +1,23 @@
+- name: Check whether the expected image archives exist
+  stat:
+    path: "/home/{{ ansible_user }}/{{ item.archive }}"
+  loop: "{{ offline_image_archives }}"
+  register: offline_image_archive_stats
+
+- name: Fail when a required offline image archive is missing
+  fail:
+    msg: "Offline image archive not found: /home/{{ ansible_user }}/{{ item.item.archive }}"
+  loop: "{{ offline_image_archive_stats.results }}"
+  when: not item.stat.exists
+
+- name: Check whether the image is already present in containerd
+  command: "crictl inspecti {{ item.image }}"
+  loop: "{{ offline_image_archives }}"
+  register: offline_image_presence
+  changed_when: false
+  failed_when: false
+
+- name: Import missing images into containerd
+  command: "ctr -n k8s.io images import /home/{{ ansible_user }}/{{ item.item.archive }}"
+  loop: "{{ offline_image_presence.results }}"
+  when: item.rc != 0

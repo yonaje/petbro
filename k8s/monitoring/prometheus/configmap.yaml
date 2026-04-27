@@ -15,7 +15,6 @@ data:
           - targets:
               - localhost:9090
 
-      # These jobs assume the services expose Prometheus metrics on /metrics.
       - job_name: petbro-authservice
         static_configs:
           - targets:
